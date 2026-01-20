@@ -32,7 +32,7 @@ services:
 
   # OpenWorkers API
   openworkers-api:
-    image: ghcr.io/openworkers/openworkers-api:v1.3.1
+    image: ghcr.io/openworkers/openworkers-api:v1.3.6
     depends_on:
       - postgate
     env_file:
@@ -87,11 +87,12 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.8.5-v8
+    image: ghcr.io/openworkers/openworkers-runner:v0.10.0-v8
     env_file:
       - .env
     environment:
       - RUST_LOG=openworkers_runtime=debug,openworkers_runner=debug
+      - DB_TEST_BEFORE_ACQUIRE=false
     depends_on:
       - postgres
       - nats

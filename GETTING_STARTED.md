@@ -33,14 +33,23 @@ docker compose ps
 ## 3. Run migrations
 
 ```bash
-# Clone the CLI repo (if not already)
-git clone https://github.com/openworkers/openworkers-cli.git
+# Using the CLI (recommended)
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
 
-# Apply migrations
-for f in openworkers-cli/migrations/*.sql; do
-  echo "Applying $f..."
-  docker compose exec -T postgres psql -U $POSTGRES_USER -d $POSTGRES_DB < "$f"
-done
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  infra db migrate
+```
+
+Or if you have the CLI installed locally:
+
+```bash
+ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
+ow infra db migrate
 ```
 
 This creates all tables including Postgate compatibility views.
@@ -86,13 +95,14 @@ Dashboard should be available at `https://your-domain/`.
 # Pull latest images
 docker compose pull
 
+# Apply new migrations
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  infra db migrate
+
 # Restart with new images
 docker compose up -d
-
-# Apply new migrations if any
-for f in openworkers-cli/migrations/*.sql; do
-  docker compose exec -T postgres psql -U $POSTGRES_USER -d $POSTGRES_DB < "$f" 2>/dev/null || true
-done
 ```
 
 ## Useful Commands
