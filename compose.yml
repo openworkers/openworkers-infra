@@ -32,7 +32,7 @@ services:
 
   # OpenWorkers API
   openworkers-api:
-    image: ghcr.io/openworkers/openworkers-api:v1.3.6
+    image: ghcr.io/openworkers/openworkers-api:v1.4.0
     depends_on:
       - postgate
     env_file:
@@ -87,7 +87,7 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.10.0-v8
+    image: ghcr.io/openworkers/openworkers-runner:v0.10.6-v8
     env_file:
       - .env
     environment:
@@ -133,7 +133,7 @@ services:
 
   # OpenWorkers Dashboard
   openworkers-dash:
-    image: ghcr.io/openworkers/openworkers-dash:v1.2.3
+    image: ghcr.io/openworkers/openworkers-dash:v1.4.0
     healthcheck:
       test:
         [
