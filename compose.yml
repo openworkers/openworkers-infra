@@ -102,7 +102,7 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.10.6-v8
+    image: ghcr.io/openworkers/openworkers-runner:v0.11.5-v8
     env_file:
       - .env
     environment:
