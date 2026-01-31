@@ -30,7 +30,7 @@ docker compose up -d postgres
 docker compose ps
 ```
 
-## 3. Run migrations
+## 3. Configure CLI alias
 
 ```bash
 # Using the CLI (recommended)
@@ -38,23 +38,79 @@ docker run --rm --network host \
   -v ~/.openworkers:/root/.openworkers \
   ghcr.io/openworkers/openworkers-cli \
   alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
-
-docker run --rm --network host \
-  -v ~/.openworkers:/root/.openworkers \
-  ghcr.io/openworkers/openworkers-cli \
-  infra db migrate
 ```
 
 Or if you have the CLI installed locally:
 
 ```bash
 ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
-ow infra db migrate
+```
+
+## 4. Run migrations
+
+**Option A: Using the CLI (recommended)**
+
+```bash
+# Using Docker
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  infra migrate run
+
+# Or locally
+ow infra migrate run
+```
+
+**Option B: Manual SQL files**
+
+If you prefer to apply migrations manually:
+
+```bash
+for f in openworkers-cli/migrations/*.sql; do
+  echo "Applying $f..."
+  docker compose exec -T postgres psql -U $POSTGRES_USER -d $POSTGRES_DB < "$f"
+done
+```
+
+**If you already ran migrations manually:**
+
+Mark them as applied so the CLI doesn't re-run them:
+
+```bash
+ow infra migrate baseline
 ```
 
 This creates all tables including Postgate compatibility views.
 
-## 4. Generate API token
+## 5. Create first user
+
+```bash
+# Using Docker
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  infra users create admin
+
+# Or locally
+ow infra users create admin
+```
+
+## 6. Configure user in alias
+
+```bash
+# Using Docker
+docker run --rm --network host \
+  -v ~/.openworkers:/root/.openworkers \
+  ghcr.io/openworkers/openworkers-cli \
+  alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB --user admin --force
+
+# Or locally
+ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB --user admin --force
+```
+
+Now the CLI can manage workers on behalf of the `admin` user.
+
+## 7. Generate API token
 
 The migrations created a database config for the API. Generate a token for it:
 
@@ -74,13 +130,13 @@ Copy the generated token to `.env`:
 POSTGATE_TOKEN=pg_xxx...
 ```
 
-## 5. Start all services
+## 8. Start all services
 
 ```bash
 docker compose up -d
 ```
 
-## 6. Verify
+## 9. Verify
 
 ```bash
 docker compose ps
@@ -88,6 +144,13 @@ docker compose logs -f
 ```
 
 Dashboard should be available at `https://your-domain/`.
+
+You can now manage workers via CLI:
+
+```bash
+ow infra workers create my-worker
+ow infra workers deploy my-worker script.ts
+```
 
 ## Updating
 
@@ -99,7 +162,10 @@ docker compose pull
 docker run --rm --network host \
   -v ~/.openworkers:/root/.openworkers \
   ghcr.io/openworkers/openworkers-cli \
-  infra db migrate
+  infra migrate run
+
+# Or locally
+ow infra migrate run
 
 # Restart with new images
 docker compose up -d
@@ -127,7 +193,25 @@ docker compose down -v
 
 ## Database management
 
-Use the `database.sh` script:
+**Using the CLI:**
+
+```bash
+# Check migration status
+ow infra migrate status
+
+# Run pending migrations
+ow infra migrate run
+
+# Baseline (mark all as applied without running)
+ow infra migrate baseline
+
+# User management
+ow infra users list
+ow infra users create username
+ow infra users delete username
+```
+
+**Using the `database.sh` script:**
 
 ```bash
 # Backup
@@ -136,7 +220,7 @@ Use the `database.sh` script:
 # Restore
 ./database.sh restore ~/backups/openworkers/openworkers-2025-01-10.dump
 
-# Run a migration
+# Run a migration manually
 ./database.sh migrate path/to/migration.sql
 
 # Interactive psql

@@ -79,10 +79,15 @@ cargo install --git https://github.com/openworkers/openworkers-cli
 # Or use Docker
 docker run --rm ghcr.io/openworkers/openworkers-cli --help
 
-# Run migrations
+# Self-hosting setup
 ow alias set infra --db postgres://user:pass@localhost/openworkers
-ow infra db migrate
-ow infra db status
+ow infra migrate run                    # Run migrations
+ow infra users create admin             # Create first user
+ow alias set infra --db postgres://... --user admin --force  # Set user context
+
+# Manage workers
+ow infra workers create my-worker
+ow infra workers deploy my-worker script.ts
 ```
 
 ## Scripts
