@@ -102,11 +102,11 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.11.5-v8
+    image: ghcr.io/openworkers/openworkers-runner:v0.12.3-v8
     env_file:
       - .env
     environment:
-      - RUST_LOG=openworkers_runtime=debug,openworkers_runner=debug
+      - RUST_LOG=info,openworkers_runner=debug,openworkers_runtime_v8=debug
       - DB_TEST_BEFORE_ACQUIRE=false
     depends_on:
       - postgres
