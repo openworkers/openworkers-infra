@@ -19,7 +19,8 @@ cp .env.example .env
 
 - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` - Database credentials
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` - OAuth (for dashboard login)
-- `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` - Auth tokens (generate random strings)
+- `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` - Auth tokens (>= 32 chars each)
+- `POSTGATE_SYSTEM_TOKEN_SECRET` - System token HMAC secret (>= 32 chars)
 - `HTTP_TLS_CERTIFICATE` / `HTTP_TLS_KEY` - TLS cert paths
 
 ## 2. Start database
@@ -33,110 +34,71 @@ docker compose ps
 ## 3. Configure CLI alias
 
 ```bash
-# Using the CLI (recommended)
+ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
+```
+
+Or using Docker if you don't have the CLI installed locally:
+
+```bash
 docker run --rm --network host \
   -v ~/.openworkers:/root/.openworkers \
   ghcr.io/openworkers/openworkers-cli \
   alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
 ```
 
-Or if you have the CLI installed locally:
-
-```bash
-ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB
-```
-
 ## 4. Run migrations
 
-**Option A: Using the CLI (recommended)**
-
 ```bash
-# Using Docker
-docker run --rm --network host \
-  -v ~/.openworkers:/root/.openworkers \
-  ghcr.io/openworkers/openworkers-cli \
-  infra migrate run
-
-# Or locally
+ow infra migrate status
 ow infra migrate run
 ```
 
-**Option B: Manual SQL files**
+## 5. Claim the system user
 
-If you prefer to apply migrations manually:
+The system user (`00000000-...`) owns shared resources (the platform database config, etc.). Claim it with your admin identity.
+
+**The username must match exactly how you will log in:**
+
+- **GitHub OAuth** → use your GitHub username (e.g. `max-lt`)
+- **Email/password (headless)** → use your email (e.g. `admin@example.com`)
+
+> **Important:** Anyone who signs up or logs in with this username gets admin access to platform resources. Double-check it before proceeding.
 
 ```bash
-for f in openworkers-cli/migrations/*.sql; do
-  echo "Applying $f..."
-  docker compose exec -T postgres psql -U $POSTGRES_USER -d $POSTGRES_DB < "$f"
-done
+# GitHub login
+ow infra users create my-github-handle --system
+
+# Or email/password login (headless, no GitHub)
+ow infra users create admin@example.com --system --password
 ```
 
-**If you already ran migrations manually:**
-
-Mark them as applied so the CLI doesn't re-run them:
+Update the alias to reference the admin user:
 
 ```bash
-ow infra migrate baseline
+ow alias set infra --db postgres://... --user my-github-handle --force
 ```
 
-This creates all tables including Postgate compatibility views.
+## 6. Generate Postgate token
 
-## 5. Create first user
-
-```bash
-# Using Docker
-docker run --rm --network host \
-  -v ~/.openworkers:/root/.openworkers \
-  ghcr.io/openworkers/openworkers-cli \
-  infra users create admin
-
-# Or locally
-ow infra users create admin
-```
-
-## 6. Configure user in alias
+The migrations created a database config for the API. Start Postgate and generate a token:
 
 ```bash
-# Using Docker
-docker run --rm --network host \
-  -v ~/.openworkers:/root/.openworkers \
-  ghcr.io/openworkers/openworkers-cli \
-  alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB --user admin --force
-
-# Or locally
-ow alias set infra --db postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB --user admin --force
-```
-
-Now the CLI can manage workers on behalf of the `admin` user.
-
-## 7. Generate API token
-
-The migrations created a database config for the API. Generate a token for it:
-
-```bash
-# Start Postgate
 docker compose up -d postgate
 
-# Generate API token
 docker compose exec postgate postgate gen-token \
-  aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa api \
+  00000000-0000-0000-0000-000000000000 api \
   --permissions SELECT,INSERT,UPDATE,DELETE
 ```
 
-Copy the generated token to `.env`:
+Copy the generated token (`pg_xxx...`) to `.env` as `POSTGATE_TOKEN`.
 
-```
-POSTGATE_TOKEN=pg_xxx...
-```
-
-## 8. Start all services
+## 7. Start all services
 
 ```bash
 docker compose up -d
 ```
 
-## 9. Verify
+## 8. Verify
 
 ```bash
 docker compose ps
@@ -152,6 +114,12 @@ ow infra workers create my-worker
 ow infra workers deploy my-worker script.ts
 ```
 
+## Workerized deployment (optional)
+
+The API and Dashboard can also run as workers on the platform itself instead of as Docker containers. See [openworkers-api/DEPLOY.md](https://github.com/openworkers/openworkers-api/blob/main/DEPLOY.md) for instructions.
+
+In this mode, Postgate HTTP is optional too — the workerized API uses runtime database bindings directly.
+
 ## Updating
 
 ```bash
@@ -159,19 +127,13 @@ ow infra workers deploy my-worker script.ts
 docker compose pull
 
 # Apply new migrations
-docker run --rm --network host \
-  -v ~/.openworkers:/root/.openworkers \
-  ghcr.io/openworkers/openworkers-cli \
-  infra migrate run
-
-# Or locally
 ow infra migrate run
 
 # Restart with new images
 docker compose up -d
 ```
 
-## Useful Commands
+## Useful commands
 
 ```bash
 # View logs
@@ -182,7 +144,7 @@ docker compose logs -f openworkers-runner
 docker compose restart openworkers-api
 
 # Shell into postgres
-docker compose exec postgres psql -U openworkers -d openworkers
+docker compose exec postgres psql -U $POSTGRES_USER -d $POSTGRES_DB
 
 # Stop all services
 docker compose down
@@ -192,8 +154,6 @@ docker compose down -v
 ```
 
 ## Database management
-
-**Using the CLI:**
 
 ```bash
 # Check migration status
@@ -207,22 +167,15 @@ ow infra migrate baseline
 
 # User management
 ow infra users list
-ow infra users create username
+ow infra users create username          # GitHub login
+ow infra users create email --password  # Email/password login
 ow infra users delete username
 ```
 
-**Using the `database.sh` script:**
+Using the `database.sh` script:
 
 ```bash
-# Backup
 ./database.sh backup
-
-# Restore
 ./database.sh restore ~/backups/openworkers/openworkers-2025-01-10.dump
-
-# Run a migration manually
-./database.sh migrate path/to/migration.sql
-
-# Interactive psql
 ./database.sh psql
 ```

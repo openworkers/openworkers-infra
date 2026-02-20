@@ -1,15 +1,19 @@
-# Getting Started (Local Development)
+# Getting Started (Native / No Docker)
 
-Development setup for contributing to OpenWorkers. Uses Docker for PostgreSQL and NATS.
-
-For a fully native setup (no Docker), see [GETTING_STARTED_NATIVE.md](./GETTING_STARTED_NATIVE.md).
+Fully native development setup — no Docker required.
 
 ## Prerequisites
 
 - Rust (latest stable)
 - Bun
-- Docker + Docker Compose
+- PostgreSQL (local install)
+- NATS server (local install)
 - Node.js 20+ (for Angular CLI)
+
+```bash
+# macOS (Homebrew)
+brew install postgresql nats-server bun node rust
+```
 
 ## Clone repositories
 
@@ -23,23 +27,32 @@ git clone https://github.com/openworkers/openworkers-api.git
 git clone https://github.com/openworkers/openworkers-dash.git
 git clone https://github.com/openworkers/openworkers-scheduler.git
 
+# Required for native Postgate
+git clone https://github.com/openworkers/postgate.git
+
 # Optional: runtime libraries
 git clone https://github.com/openworkers/openworkers-core.git
 git clone https://github.com/openworkers/openworkers-runtime-v8.git
-git clone https://github.com/openworkers/postgate.git
 ```
 
 ## 1. Start PostgreSQL and NATS
 
 ```bash
-cd openworkers-infra
-docker compose up -d postgres nats
+brew services start postgresql
+brew services start nats-server
+```
+
+Create the database if needed:
+
+```bash
+createdb openworkers
+createuser openworkers
 ```
 
 ## 2. Setup database
 
 ```bash
-ow alias set infra --db postgres://openworkers:openworkers@localhost:5432/openworkers
+ow alias set infra --db postgres://openworkers@localhost:5432/openworkers
 ow infra migrate run
 ```
 
@@ -48,7 +61,7 @@ If you don't have the CLI yet, apply migrations manually:
 ```bash
 for f in openworkers-cli/migrations/*.sql; do
   echo "Applying $f..."
-  docker compose exec -T postgres psql -U openworkers -d openworkers < "$f"
+  psql -U openworkers -d openworkers < "$f"
 done
 ```
 
@@ -58,7 +71,7 @@ done
 cd postgate
 
 cat > .env << 'EOF'
-DATABASE_URL=postgres://openworkers:openworkers@localhost:5432/openworkers
+DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
 POSTGATE_PORT=3001
 EOF
 
@@ -102,7 +115,7 @@ cd openworkers-runner
 
 cat > .env << 'EOF'
 NATS_URL=localhost:4222
-DATABASE_URL=postgres://openworkers:openworkers@localhost:5432/openworkers
+DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
 RUST_LOG=info
 EOF
 
@@ -133,43 +146,11 @@ cd openworkers-scheduler
 
 cat > .env << 'EOF'
 NATS_URL=localhost:4222
-DATABASE_URL=postgres://openworkers:openworkers@localhost:5432/openworkers
+DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
 EOF
 
 bun install
 bun run dev
-```
-
-## Development workflow
-
-### Runner (Rust)
-
-```bash
-cd openworkers-runner
-
-cargo test --features v8           # Run all tests
-cargo test --features v8 test_name # Run specific test
-
-# After modifying runtime JS (in openworkers-runtime-v8)
-cargo run --features v8 --bin snapshot
-```
-
-### API (TypeScript/Bun)
-
-```bash
-cd openworkers-api
-
-bun run dev     # Development with hot reload
-bun test        # Run tests
-```
-
-### Dashboard (Angular)
-
-```bash
-cd openworkers-dash
-
-bun start       # Development server
-bun run build   # Production build
 ```
 
 ## Ports summary
@@ -182,9 +163,3 @@ bun run build   # Production build
 | API        | 3000 |
 | Dashboard  | 4200 |
 | Runner     | 8080 |
-
-## Tips
-
-- Use `./database.sh psql` from infra to quickly access the database
-- Dashboard proxies `/api` requests to the API (configured in `proxy.conf.json`)
-- Runner logs show worker execution details with `RUST_LOG=debug`

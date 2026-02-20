@@ -5,22 +5,23 @@ Self-hosted Cloudflare Workers runtime.
 ## Getting Started
 
 - **[Docker Compose](./GETTING_STARTED.md)** - Self-hosted deployment
-- **[Local Development](./GETTING_STARTED_LOCAL.md)** - Contributing to OpenWorkers
+- **[Local Development](./GETTING_STARTED_LOCAL.md)** - Contributing (Docker for postgres/nats)
+- **[Native Development](./GETTING_STARTED_NATIVE.md)** - Contributing (no Docker)
 
 ## Stack
 
-| Service | Description |
-| ------- | ----------- |
-| postgres | PostgreSQL database |
-| nats | Message queue for worker communication |
-| [postgate](https://github.com/openworkers/postgate) | HTTP proxy for PostgreSQL (query validation, multi-tenant) |
-| [openworkers-api](https://github.com/openworkers/openworkers-api) | REST API |
-| [openworkers-runner](https://github.com/openworkers/openworkers-runner) | Worker runtime (V8 isolates) |
-| [openworkers-logs](https://github.com/openworkers/openworkers-logs) | Log aggregator |
-| [openworkers-scheduler](https://github.com/openworkers/openworkers-scheduler) | Cron job scheduler |
-| [openworkers-dash](https://github.com/openworkers/openworkers-dash) | Dashboard UI |
-| [openworkers-cli](https://github.com/openworkers/openworkers-cli) | CLI for migrations & worker management |
-| openworkers-proxy | Nginx reverse proxy |
+| Service                                                                       | Description                                                |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| postgres                                                                      | PostgreSQL database                                        |
+| nats                                                                          | Message queue for worker communication                     |
+| [postgate](https://github.com/openworkers/postgate)                           | HTTP proxy for PostgreSQL (query validation, multi-tenant) |
+| [openworkers-api](https://github.com/openworkers/openworkers-api)             | REST API                                                   |
+| [openworkers-runner](https://github.com/openworkers/openworkers-runner)       | Worker runtime (V8 isolates)                               |
+| [openworkers-logs](https://github.com/openworkers/openworkers-logs)           | Log aggregator                                             |
+| [openworkers-scheduler](https://github.com/openworkers/openworkers-scheduler) | Cron job scheduler                                         |
+| [openworkers-dash](https://github.com/openworkers/openworkers-dash)           | Dashboard UI                                               |
+| [openworkers-cli](https://github.com/openworkers/openworkers-cli)             | CLI for migrations & worker management                     |
+| openworkers-proxy                                                             | Nginx reverse proxy                                        |
 
 ## Architecture
 
@@ -29,17 +30,17 @@ Self-hosted Cloudflare Workers runtime.
                          │  nginx (proxy)  │
                          └────────┬────────┘
                                   │
-         ┌───────────────┬────────┴──┬───────────────┐
-         │               │           │               │
-         │               │           │               │
-┌────────┸────────┐ ┌────┸────┐ ┌────┸────┐ ┌────────┸────────┐
-│   dashboard     │ │  api    │ │ logs *  │ │  runner (x3) *  │
-└─────────────────┘ └────┬────┘ └────┰────┘ └────────┰────────┘
-                         │           │               │
-                         │           │               │
-                ┌────────┸────────┐  │      ┌────────┸────────┐
-                │   postgate *    │  └──────┥      nats       │
-                └─────────────────┘         └────────┰────────┘
+         ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌─┴──┬───────────────┐
+         ╎               ╎           │               │
+         ╎               ╎           │ sse/ws        │ http
+┌╌╌╌╌╌╌╌╌┸╌╌╌╌╌╌╌┐   ┌╌╌╌┸╌╌╌┐  ┌────┸────┐    ┌─────┸───────┐
+╎   dashboard    ╎   ╎  api  ╎  │ logs *  │    │   runner *  │
+└╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘   └╌╌╌┬╌╌╌┘  └────┰────┘    └─────┰───────┘
+                         ╎           │               │
+                         ╎           │               │
+                ┌╌╌╌╌╌╌╌╌┸╌╌╌╌╌╌╌╌┐  │      ┌────────┸────────┐
+                ╎   postgate *    ╎  └──────┥      nats       │
+                └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘         └────────┰────────┘
                                                      │
                                                      │
                 ┌─────────────────┐           ┌──────┴───────┐
@@ -47,6 +48,10 @@ Self-hosted Cloudflare Workers runtime.
                 └─────────────────┘           └──────────────┘
 
 ```
+
+Note that `dashboard` and `api` can now be run directly as workers (`postgate` is in that case optional too as workerized api has runtime bindings to database).
+
+Services `logs` and `scheduler` are not required for the core runtime but provide additional functionality (log streaming and cron jobs).
 
 ## How Database Access Works
 
