@@ -52,7 +52,32 @@ for f in openworkers-cli/migrations/*.sql; do
 done
 ```
 
-## 3. Start Postgate
+## 3. Claim the system user
+
+The system user (`00000000-...`) owns shared resources (the API database config, etc.). Claim it with your admin identity.
+
+**The username must match exactly how you will log in:**
+
+- **GitHub OAuth** → use your GitHub username (e.g. `max-lt`)
+- **Email/password (headless)** → use your email (e.g. `admin@example.com`)
+
+> **Important:** Anyone who signs up or logs in with this username gets admin access to platform resources. Double-check it before proceeding.
+
+```bash
+# GitHub login
+ow infra users create my-github-handle --system
+
+# Or email/password login (headless, no GitHub)
+ow infra users create admin@example.com --system --password
+```
+
+Update the alias to reference the admin user:
+
+```bash
+ow alias set infra --db postgres://openworkers:openworkers@localhost:5432/openworkers --user my-github-handle --force
+```
+
+## 4. Start Postgate
 
 ```bash
 cd postgate
@@ -73,7 +98,7 @@ Generate a dev token for the API:
 cargo run -- gen-token 00000000-0000-0000-0000-000000000000 api --permissions SELECT,INSERT,UPDATE,DELETE
 ```
 
-## 4. Start API
+## 5. Start API
 
 ```bash
 cd openworkers-api
@@ -88,14 +113,14 @@ JWT_REFRESH_SECRET=dev-refresh-secret-at-least-32-chars-long
 EOF
 
 bun install
-bun run dev
+bun dev
 ```
 
-Replace `pg_xxx` with the token generated in step 3.
+Replace `pg_xxx` with the token generated in step 4.
 
 API runs on `http://localhost:3000`.
 
-## 5. Start Runner
+## 6. Start Runner
 
 ```bash
 cd openworkers-runner
@@ -115,18 +140,18 @@ cargo run --features v8
 
 Runner is an HTTP server on port 8080. It loads worker code from PostgreSQL and executes it in V8. Logs are published to NATS, and scheduled tasks are received from NATS.
 
-## 6. Start Dashboard
+## 7. Start Dashboard
 
 ```bash
 cd openworkers-dash
 
 bun install
-bun start
+bun dev
 ```
 
 Dashboard runs on `http://localhost:4200` with proxy to API.
 
-## 7. Start Scheduler (optional)
+## 8. Start Scheduler (optional)
 
 ```bash
 cd openworkers-scheduler
@@ -137,7 +162,7 @@ DATABASE_URL=postgres://openworkers:openworkers@localhost:5432/openworkers
 EOF
 
 bun install
-bun run dev
+bun dev
 ```
 
 ## Development workflow
@@ -159,7 +184,7 @@ cargo run --features v8 --bin snapshot
 ```bash
 cd openworkers-api
 
-bun run dev     # Development with hot reload
+bun dev         # Development with hot reload
 bun test        # Run tests
 ```
 
@@ -168,7 +193,7 @@ bun test        # Run tests
 ```bash
 cd openworkers-dash
 
-bun start       # Development server
+bun dev         # Development server
 bun run build   # Production build
 ```
 
