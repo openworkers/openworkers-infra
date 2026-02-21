@@ -32,7 +32,7 @@ services:
 
   # OpenWorkers API
   openworkers-api:
-    image: ghcr.io/openworkers/openworkers-api:v1.6.1
+    image: ghcr.io/openworkers/openworkers-api:v1.7.1
     depends_on:
       - postgate
     env_file:
