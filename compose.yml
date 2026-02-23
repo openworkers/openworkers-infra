@@ -102,7 +102,7 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.13.6-v8-telemetry
+    image: ghcr.io/openworkers/openworkers-runner:v0.13.10-v8-telemetry
     env_file:
       - .env
     environment:
