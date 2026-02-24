@@ -32,7 +32,7 @@ services:
 
   # OpenWorkers API
   openworkers-api:
-    image: ghcr.io/openworkers/openworkers-api:v1.7.1
+    image: ghcr.io/openworkers/openworkers-api:v1.8.0
     depends_on:
       - postgate
     env_file:
@@ -52,7 +52,7 @@ services:
 
   # OpenWorkers Dashboard
   openworkers-dash:
-    image: ghcr.io/openworkers/openworkers-dash:v1.4.5
+    image: ghcr.io/openworkers/openworkers-dash:v1.5.0
     healthcheck:
       test:
         [
@@ -67,7 +67,7 @@ services:
   # Postgate (HTTP proxy for Postgres)
   # Uses OpenWorkers database via views (postgate_databases, postgate_tokens)
   postgate:
-    image: ghcr.io/openworkers/postgate:v0.1.4
+    image: ghcr.io/openworkers/postgate:v0.1.5
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       - RUST_LOG=postgate=info
