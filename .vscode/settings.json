@@ -6,6 +6,7 @@
     "openworkers",
     "postgate",
     "psql",
+    "signoz",
     "webp"
   ]
 }
