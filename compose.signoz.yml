@@ -1,0 +1,10 @@
+networks:
+  default:
+  signoz-net:
+    external: true
+
+services:
+  openworkers-runner:
+    networks:
+      - default
+      - signoz-net

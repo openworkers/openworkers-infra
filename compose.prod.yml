@@ -1,5 +1,18 @@
 services:
+  nats:
+    restart: always
+  postgres:
+    restart: always
+  postgate:
+    restart: always
+  openworkers-runner:
+    restart: always
+  openworkers-logs:
+    restart: always
+  openworkers-scheduler:
+    restart: always
   openworkers-proxy:
+    restart: always
     ports:
       - 5080:80
       - 50443:443
