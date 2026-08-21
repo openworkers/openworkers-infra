@@ -1,24 +1,25 @@
 # Getting Started
 
-OpenWorkers runs its own control plane on itself: the API, and the dashboard it
-serves, are workers deployed on the platform they manage. This document sets up
-that mode end to end, from an empty machine to a dashboard served by the runner.
+OpenWorkers runs its own control plane on itself: the API worker serves both
+the REST API and the dashboard UI, deployed on the platform it manages. This
+document sets up that mode end to end, from an empty machine to a dashboard
+served by the runner.
 
 The API also runs as a plain Bun server. That is a development convenience
 covered in [Development loop](#10-development-loop), not a deployment target.
 
 ## What runs where
 
-| Process         | Language | Role                                                        |
-| --------------- | -------- | ----------------------------------------------------------- |
-| postgres        | -        | Single source of truth: workers, users, environments, assets metadata |
-| nats            | -        | Log fan-out and scheduled events                            |
-| runner          | Rust     | Executes workers, serves HTTP on 8080                       |
-| postgate        | Rust     | HTTP proxy in front of postgres, used by the standalone API and for user databases |
-| `ow` (CLI)      | Rust     | Migrations, users, workers, bindings, over a direct database connection |
-| openworkers-api | Bun      | REST API and dashboard UI, deployed as a worker             |
-| logs            | Rust     | Log streaming to the dashboard (optional)                   |
-| scheduler       | Rust     | Cron events (optional)                                      |
+| Process         | Language | Role                                                                             |
+| --------------- | -------- | -------------------------------------------------------------------------------- |
+| postgres        | -        | Single source of truth: workers, users, environments, assets metadata            |
+| nats            | -        | Log fan-out and scheduled events                                                 |
+| runner          | Rust     | Executes workers, serves HTTP on 8080                                            |
+| postgate        | Rust     | HTTP proxy in front of postgres, used by the API dev loop and for user databases |
+| `ow` (CLI)      | Rust     | Migrations, users, workers, bindings, over a direct database connection          |
+| openworkers-api | Bun      | REST API and dashboard UI, deployed as a worker                                  |
+| logs            | Rust     | Log streaming to the dashboard (optional)                                        |
+| scheduler       | Rust     | Cron events (optional)                                                           |
 
 ## 1. Prerequisites
 
@@ -51,7 +52,6 @@ git clone https://github.com/openworkers/openworkers-api.git
 git clone https://github.com/openworkers/postgate.git             # step 5
 git clone https://github.com/openworkers/openworkers-logs.git     # optional
 git clone https://github.com/openworkers/openworkers-scheduler.git # optional
-git clone https://github.com/openworkers/openworkers-dash.git     # optional, split layout only
 ```
 
 ## 2. PostgreSQL and NATS
@@ -112,7 +112,7 @@ command.
 > The CLI wraps each migration file in a transaction (sqlx). Migration 28 starts
 > with `ALTER TYPE ... ADD VALUE`, and PostgreSQL refuses to use a new enum value
 > in the transaction that added it: `unsafe use of new value "planetscale" of
-> enum type`. Everything before 28 is applied when this fires. Apply that one
+enum type`. Everything before 28 is applied when this fires. Apply that one
 > file with psql, which runs it in autocommit, then record it:
 >
 > ```bash
@@ -186,9 +186,9 @@ Postgate proxies SQL over HTTP. The runner embeds it as a library, so a worker-m
 API reaches the platform database through its `DATABASE` binding and needs no
 Postgate service for that. Postgate is needed for two other things:
 
-- the standalone dev loop (step 10), where the API queries postgres over HTTP
+- the dev loop (step 10), where the API queries postgres over HTTP
   with a `pg_...` token;
-- SQL run against a *user* database from the dashboard, which the API sends to
+- SQL run against a _user_ database from the dashboard, which the API sends to
   `POSTGATE_URL` with a token derived from `POSTGATE_SYSTEM_TOKEN_SECRET`.
 
 ```bash
@@ -299,23 +299,8 @@ afterwards has to cascade it. See
 
 ### Dashboard
 
-Two layouts exist, and the choice shows up again in the proxy config (step 9):
-
-- **Unified**: the SvelteKit app in `openworkers-api` serves both the API and the
-  UI. One worker, nothing else to deploy.
-- **Split**: the Angular dashboard is a second worker.
-
-```bash
-cd openworkers-dash
-bun install && bun run deploy:prepare
-
-ow infra workers create openworkers-dash
-ow infra storage create openworkers-dash-storage
-ow infra env create openworkers-dash-env
-ow infra env bind openworkers-dash-env ASSETS openworkers-dash-storage --type assets
-ow infra workers link openworkers-dash openworkers-dash-env
-ow infra workers upload openworkers-dash ./dist/openworkers
-```
+The `openworkers-api` worker serves the dashboard UI itself. There is nothing
+else to deploy.
 
 ## 8. Run the platform
 
@@ -385,25 +370,15 @@ The script picks a container runtime:
   in the config work as written.
 - **apple `container`**: no host networking. The entrypoint rewrites the
   `127.0.0.1` upstreams to the VM's gateway, so host processes have to listen
-  beyond loopback. Start the API dev server with `--host 0.0.0.0`. The Angular
-  `dev` script pins `ng serve` to `127.0.0.1` and stays unreachable this way.
+  beyond loopback. Start the API dev server with `--host 0.0.0.0`.
 
-`nginx/servers/dash.dev.conf` routes `/api`, the worker upload endpoint, and the
-`@dash` catch-all to one of three upstreams. One `proxy_pass` line is active and
-the alternatives sit commented next to it:
+`nginx/servers/dash.dev.conf` routes `/api`, the worker upload endpoint, and
+the `@dash` catch-all to the runner (`workers_server`, 127.0.0.1:8080) with
+`X-Worker-Name: openworkers-api` -- the same path production takes. The proxy
+exists to mirror production; when iterating on the API with `bun dev`, talk to
+it directly on its vite port instead.
 
-| Upstream         | Address        | Serves                        | `X-Worker-Name`   |
-| ---------------- | -------------- | ----------------------------- | ----------------- |
-| `workers_server` | 127.0.0.1:8080 | the API worker, through the runner | `openworkers-api` |
-| `api_server`     | 127.0.0.1:7000 | the standalone Bun dev server | ignored           |
-| `dash_server`    | 127.0.0.1:4200 | `ng serve`, split layout only | ignored           |
-
-Dogfooding points every location at `workers_server`. The header has to name a
-worker that exists: with the unified app there is no `openworkers-dash` worker,
-and sending that name gets `No worker or project found for request` from the
-runner.
-
-Logs keep their own upstream (`log_server`, 127.0.0.1:18080) in every mode.
+Logs keep their own upstream (`log_server`, 127.0.0.1:18080).
 
 With the runner up and the proxy pointing at it, the platform answers on
 `https://dash.dev.localhost`:
@@ -423,7 +398,6 @@ the upload of step 7 did not land under the name the proxy sends.
 cd openworkers-api
 
 cat > .env << 'EOF'
-PORT=7000
 APP_URL=https://dash.dev.localhost
 POSTGATE_URL=http://localhost:6080
 POSTGATE_TOKEN=pg_xxx
@@ -436,10 +410,9 @@ bun install
 bun dev            # add --host 0.0.0.0 behind apple's container tool
 ```
 
-`pg_xxx` is the token from step 5. Vite listens on `PORT`, or 5173 when unset,
-and 7000 is what the `api_server` upstream expects; point `@dash` and `/api`
-there while working this way. Without a `DATABASE` binding the app falls back to
-the token, and a missing one gives `No database client available: neither
+`pg_xxx` is the token from step 5. Vite listens on 5173, or `PORT` when set;
+talk to it directly there, the proxy stays on the runner. Without a
+`DATABASE` binding the app falls back to the token, and a missing one gives `No database client available: neither
 DATABASE binding nor POSTGATE_TOKEN configured`.
 
 **Test what you ship.** Redeploy the worker and switch the proxy back to
@@ -457,36 +430,35 @@ checked here before it counts as working.
 
 ## 11. Ports
 
-| Service                | Port      | Set by                                       |
-| ---------------------- | --------- | -------------------------------------------- |
-| PostgreSQL             | 5432      | postgres                                     |
-| NATS                   | 4222      | nats-server                                  |
-| Postgate               | 6080      | `POSTGATE_PORT`; the binary alone defaults to 3000 |
-| API, standalone        | 7000      | `PORT`; vite alone defaults to 5173          |
-| Angular dashboard      | 4200      | `ng serve`                                   |
-| Runner                 | 8080      | hardcoded                                    |
-| Logs                   | 18080     | `PORT`; the binary alone defaults to 8080    |
-| Dev proxy              | 80, 443   | `run-dev.sh`                                 |
+| Service         | Port    | Set by                                             |
+| --------------- | ------- | -------------------------------------------------- |
+| PostgreSQL      | 5432    | postgres                                           |
+| NATS            | 4222    | nats-server                                        |
+| Postgate        | 6080    | `POSTGATE_PORT`; the binary alone defaults to 3000 |
+| API (`bun dev`) | 5173    | vite; `PORT` overrides                             |
+| Runner          | 8080    | hardcoded                                          |
+| Logs            | 18080   | `PORT`; the binary alone defaults to 8080          |
+| Dev proxy       | 80, 443 | `run-dev.sh`                                       |
 
-The nginx dev config hardcodes 7000, 4200, 8080 and 18080 as upstreams, so
+The nginx dev config hardcodes 8080 and 18080 as upstreams, so
 changing one of those means changing `nginx/servers/dash.dev.conf` too.
 
 ## 12. Symptoms
 
-| Message                                                  | Cause                                                            |
-| -------------------------------------------------------- | ---------------------------------------------------------------- |
-| `unsafe use of new value "planetscale" of enum type`     | Migration 28 through the CLI runner (step 3)                     |
-| `Storage can only be configured for DB aliases`          | `setup-storage` without the alias prefix (step 6)                |
-| `Platform storage not configured`                        | `setup-storage` never run for this alias (step 6)                |
-| `User not found`                                         | The alias `--user` matches no `users.username` (step 4)          |
-| `/sign-in?error=github-not-configured`                   | `GITHUB_CLIENT_ID` unset in the API environment (step 7)         |
-| `No worker or project found for request`                 | `X-Worker-Name` names a worker that does not exist (step 9)      |
-| `No database client available`                           | Standalone API with neither binding nor `POSTGATE_TOKEN` (step 10) |
+| Message                                              | Cause                                                            |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `unsafe use of new value "planetscale" of enum type` | Migration 28 through the CLI runner (step 3)                     |
+| `Storage can only be configured for DB aliases`      | `setup-storage` without the alias prefix (step 6)                |
+| `Platform storage not configured`                    | `setup-storage` never run for this alias (step 6)                |
+| `User not found`                                     | The alias `--user` matches no `users.username` (step 4)          |
+| `/sign-in?error=github-not-configured`               | `GITHUB_CLIENT_ID` unset in the API environment (step 7)         |
+| `No worker or project found for request`             | `X-Worker-Name` names a worker that does not exist (step 9)      |
+| `No database client available`                       | Dev-loop API with neither binding nor `POSTGATE_TOKEN` (step 10) |
 
 ## Container stack
 
-`compose.yml` runs the whole stack in containers, with the API and the dashboard
-as images rather than workers. Setup is identical up to step 6, since the
+`compose.yml` runs the whole stack in containers, with the API as an image
+rather than a worker. Setup is identical up to step 6, since the
 database, the system user and the platform storage are the same, and `.env`
 carries the variables the containers read.
 

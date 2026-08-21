@@ -19,39 +19,32 @@ deployed as a worker, and the dev proxy.
 | [openworkers-runner](https://github.com/openworkers/openworkers-runner)       | Worker runtime (V8 isolates)                               |
 | [openworkers-logs](https://github.com/openworkers/openworkers-logs)           | Log aggregator                                             |
 | [openworkers-scheduler](https://github.com/openworkers/openworkers-scheduler) | Cron job scheduler                                         |
-| [openworkers-dash](https://github.com/openworkers/openworkers-dash)           | Angular dashboard, for the split layout                    |
 | [openworkers-cli](https://github.com/openworkers/openworkers-cli)             | CLI for migrations & worker management                     |
 | openworkers-proxy                                                             | Nginx reverse proxy                                        |
 
 ## Architecture
 
 ```
-                         ┌─────────────────┐
-                         │  nginx (proxy)  │
-                         └────────┬────────┘
-                                  │
-         ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌─┴──┬───────────────┐
-         ╎               ╎           │               │
-         ╎               ╎           │ sse/ws        │ http
-┌╌╌╌╌╌╌╌╌┸╌╌╌╌╌╌╌┐   ┌╌╌╌┸╌╌╌┐  ┌────┸────┐    ┌─────┸───────┐
-╎   dashboard    ╎   ╎  api  ╎  │ logs *  │    │   runner *  │
-└╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘   └╌╌╌┬╌╌╌┘  └────┰────┘    └─────┰───────┘
-                         ╎           │               │
-                         ╎           │               │
-                ┌╌╌╌╌╌╌╌╌┸╌╌╌╌╌╌╌╌┐  │      ┌────────┸────────┐
-                ╎   postgate *    ╎  └──────┥      nats       │
-                └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘         └────────┰────────┘
-                                                     │
-                                                     │
-                ┌─────────────────┐           ┌──────┴───────┐
-         * ─────┥   PostgreSQL    │           │ scheduler *  │
-                └─────────────────┘           └──────────────┘
+                     +-----------------+
+                     |  nginx (proxy)  |
+                     +----+-------+----+
+                   sse/ws |       | http
+                  +-------+--+  +-+--------------------------+
+                  |  logs *  |  | runner *                   |
+                  +-------+--+  | runs the api worker        |
+                          |     | (rest api + dashboard ui)  |
+                          |     +-+--------------------------+
+                          |       |
+                     +----+-------+----+     +--------------+
+                     |      nats       +-----+ scheduler *  |
+                     +-----------------+     +--------------+
 
+                     * = connects to PostgreSQL
 ```
 
-`api` and `dashboard` run as workers on the platform itself, served by the
-runner. The API reaches postgres through a runtime `DATABASE` binding, which
-leaves `postgate` for the standalone API and for user databases.
+`api` runs as a worker on the platform itself, served by the runner, and
+serves the dashboard UI. The API reaches postgres through a runtime `DATABASE` binding, which
+leaves `postgate` for the API dev loop and for user databases.
 
 Services `logs` and `scheduler` are not required for the core runtime but provide additional functionality (log streaming and cron jobs).
 
@@ -73,7 +66,7 @@ Worker JS code          Runner (Rust)              Postgate (lib)         Postgr
 
 - **Workers** use bindings (`env.DB.query()`) provided by the runner
 - **Runner** uses Postgate as a Rust library for query validation and execution
-- **Postgate HTTP** serves the standalone API, and the SQL the API runs against
+- **Postgate HTTP** serves the API dev loop, and the SQL the API runs against
   a user's own database
 
 ## CLI
