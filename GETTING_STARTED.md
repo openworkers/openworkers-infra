@@ -457,10 +457,10 @@ changing one of those means changing `nginx/servers/dash.dev.conf` too.
 
 ## Container stack
 
-`compose.yml` runs the whole stack in containers, with the API as an image
-rather than a worker. Setup is identical up to step 6, since the
-database, the system user and the platform storage are the same, and `.env`
-carries the variables the containers read.
+`compose.yml` runs the infrastructure in containers: postgres, nats, postgate,
+the runner, logs, the scheduler and the proxy. The API worker is uploaded with
+the CLI exactly as in step 7; the compose stack only hosts it. Setup is
+identical, and `.env` carries the variables the containers read.
 
 ```bash
 docker compose up -d
@@ -476,5 +476,3 @@ docker compose up -d
 ./database.sh psql
 ```
 
-In this layout the API has no bindings, so it needs `POSTGATE_URL` and
-`POSTGATE_TOKEN` to reach the database, exactly like the dev loop of step 10.

@@ -2,6 +2,9 @@ services:
   postgres:
     ports:
       - 5432:5432
+  nats:
+    ports:
+      - 4222:4222
   openworkers-proxy:
     ports:
       - 80:80
