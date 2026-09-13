@@ -71,6 +71,7 @@ services:
       - .env
     environment:
       - RUST_LOG=info,openworkers_runner=debug,openworkers_runtime_v8=debug
+      - OTLP_SERVICE_NAME=openworkers-runner
       - DB_TEST_BEFORE_ACQUIRE=false
     depends_on:
       - postgres
@@ -95,6 +96,7 @@ services:
       - .env
     environment:
       - RUST_LOG=openworkers_logs=info
+      - OTLP_SERVICE_NAME=openworkers-logs
     depends_on:
       - postgres
       - nats
@@ -106,6 +108,7 @@ services:
       - .env
     environment:
       - RUST_LOG=openworkers_scheduler=info
+      - OTLP_SERVICE_NAME=openworkers-scheduler
     depends_on:
       - postgres
       - nats
