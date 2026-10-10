@@ -6,47 +6,58 @@ Self-hosted Cloudflare Workers runtime.
 
 **[GETTING_STARTED.md](./GETTING_STARTED.md)** walks through a full setup: infra
 services in containers or native, migrations, the system user, storage, the API
-deployed as a worker, and the dev proxy.
+deployed as a worker, and the public listeners.
 
 ## Stack
 
-| Service                                                                       | Description                                                |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| postgres                                                                      | PostgreSQL database                                        |
-| nats                                                                          | Message queue for worker communication                     |
-| [postgate](https://github.com/openworkers/postgate)                           | HTTP proxy for PostgreSQL (query validation, multi-tenant) |
-| [openworkers-api](https://github.com/openworkers/openworkers-api)             | REST API and dashboard UI, deployed as a worker            |
-| [openworkers-runner](https://github.com/openworkers/openworkers-runner)       | Worker runtime (V8 isolates)                               |
-| [openworkers-logs](https://github.com/openworkers/openworkers-logs)           | Log aggregator                                             |
-| [openworkers-scheduler](https://github.com/openworkers/openworkers-scheduler) | Cron job scheduler                                         |
-| [openworkers-cli](https://github.com/openworkers/openworkers-cli)             | CLI for migrations & worker management                     |
-| openworkers-proxy                                                             | Nginx reverse proxy                                        |
+| Service            | Role                                                                         |
+| ------------------ | ---------------------------------------------------------------------------- |
+| PostgreSQL         | Platform data and worker logs                                                |
+| NATS               | Console log transport                                                        |
+| openworkers-runner | HTTP/TLS, workers, cron scheduler, log persistence and SSE/WebSocket streams |
+| postgate           | Existing private HTTP database API; no public route                          |
+| openworkers-api    | REST API and dashboard, deployed as a worker                                 |
+| openworkers-cli    | Migrations and platform administration                                       |
 
-## Architecture
+Run one runner. It receives public traffic directly, without Nginx, and calls
+cron handlers in the same process. The internal listener on `127.0.0.1:8080`
+serves bindings and administration. Only public ports are published.
 
-```
-                     +-----------------+
-                     |  nginx (proxy)  |
-                     +----+-------+----+
-                   sse/ws |       | http
-                  +-------+--+  +-+--------------------------+
-                  |  logs *  |  | runner *                   |
-                  +-------+--+  | runs the api worker        |
-                          |     | (rest api + dashboard ui)  |
-                          |     +-+--------------------------+
-                          |       |
-                     +----+-------+----+     +--------------+
-                     |      nats       +-----+ scheduler *  |
-                     +-----------------+     +--------------+
+The runner holds a PostgreSQL advisory lock to reject a second instance. Stop
+the old runner before starting its replacement. There is no rolling update or
+failover. The Postgate library remains available for database bindings; removing
+the standalone Postgate service is a separate change.
 
-                     * = connects to PostgreSQL
+## Deploy
+
+The default runner image is built from `../openworkers-runner`. Set `RUNNER_IMAGE`
+to use a published image that includes the integrated services. Older images do
+not serve the public ports or run the scheduler and log collector.
+
+```bash
+docker compose -f compose.yml -f compose.prod.yml build openworkers-runner
+docker compose -f compose.yml -f compose.prod.yml up -d --remove-orphans
 ```
 
-`api` runs as a worker on the platform itself, served by the runner, and
-serves the dashboard UI. The API reaches postgres through a runtime `DATABASE` binding, which
-leaves `postgate` for the API dev loop and for user databases.
+For migration from the old stack, stop it **before** applying the new Compose
+files. This stops all runner replicas, the scheduler, the log collector and
+Nginx. Do not run the old log collector alongside the new runner: it would insert
+duplicate records. The new runner does not consume the old `scheduled` NATS subject.
 
-Services `logs` and `scheduler` are not required for the core runtime but provide additional functionality (log streaming and cron jobs).
+The production mapping stays `5080` for HTTP and `50443` for HTTPS. The development
+overlay maps `80` and `443`. Mount certificates through `HTTP_TLS_CERTIFICATE`
+and `HTTP_TLS_KEY` in `.env` and add `-f compose.tls.yml` to enable HTTPS and
+HTTP/2. Without this overlay, public HTTP uses HTTP/1.1. The runner loads
+certificates on startup. There is no public
+Postgate hostname. Cloudflare client-IP headers are not trusted; the recorded IP
+is the TCP peer.
+
+The production overlay mounts `inbound-allowlist.txt`, initialized with the
+Cloudflare ranges from the former Nginx configuration. It admits only those TCP
+peers on public ports. Edit the file for your deployment and restart the runner.
+Use one IPv4/IPv6 address or CIDR per line. `#` comments are allowed. An empty
+file denies all; an invalid or unreadable file prevents startup. The dev overlay
+has no allowlist. Local health checks use the internal listener.
 
 ## How Database Access Works
 

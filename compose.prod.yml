@@ -7,20 +7,10 @@ services:
     restart: always
   openworkers-runner:
     restart: always
-  openworkers-logs:
-    restart: always
-  openworkers-scheduler:
-    restart: always
-  openworkers-proxy:
-    restart: always
+    volumes:
+      - ./inbound-allowlist.txt:/etc/openworkers/inbound-allowlist.txt:ro
+    environment:
+      - INBOUND_ALLOWLIST_FILE=/etc/openworkers/inbound-allowlist.txt
     ports:
-      - 5080:80
-      - 50443:443
-    entrypoint:
-      [
-        "/usr/sbin/nginx",
-        "-c",
-        "/etc/nginx/nginx.prod.conf",
-        "-g",
-        "daemon off;",
-      ]
+      - 5080:8081
+      - 50443:8443

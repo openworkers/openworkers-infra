@@ -9,13 +9,3 @@ services:
     networks:
       - default
       - signoz-net
-
-  openworkers-logs:
-    networks:
-      - default
-      - signoz-net
-
-  openworkers-scheduler:
-    networks:
-      - default
-      - signoz-net

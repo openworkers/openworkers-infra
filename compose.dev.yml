@@ -5,15 +5,7 @@ services:
   nats:
     ports:
       - 4222:4222
-  openworkers-proxy:
+  openworkers-runner:
     ports:
-      - 80:80
-      - 443:443
-    entrypoint:
-      [
-        "/usr/sbin/nginx",
-        "-c",
-        "/etc/nginx/nginx.dev.conf",
-        "-g",
-        "daemon off;",
-      ]
+      - 80:8081
+      - 443:8443

@@ -23,6 +23,7 @@ services:
   # NATS
   nats:
     image: nats:2.12.2-alpine3.22
+    command: ["--http_port", "8222"]
     healthcheck:
       test: ["CMD-SHELL", "wget http://localhost:8222/healthz -q -S -O -"]
       interval: 10s
@@ -43,41 +44,29 @@ services:
     depends_on:
       - postgres
 
-  # OpenWorkers Proxy
-  openworkers-proxy:
-    image: nginx:1.25.1-alpine-slim
-    depends_on:
-      - openworkers-runner
-      - postgate
-    volumes:
-      - ${HTTP_TLS_CERTIFICATE}:/certs/ssl.crt:ro
-      - ${HTTP_TLS_KEY}:/certs/ssl.key:ro
-      - ./nginx:/etc/nginx:ro
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://127.0.0.1/health || exit 1",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v0.15.9-v8-telemetry
+    image: ${RUNNER_IMAGE:-openworkers-runner:local}
+    build:
+      context: ../openworkers-runner
+      args:
+        RUNTIME: v8
+        TELEMETRY: "true"
     env_file:
       - .env
     environment:
       - RUST_LOG=info,openworkers_runner=debug,openworkers_runtime_v8=debug
       - OTLP_SERVICE_NAME=openworkers-runner
       - DB_TEST_BEFORE_ACQUIRE=false
+      - HTTP_ADDR=0.0.0.0:8081
+      - HTTPS_ADDR=0.0.0.0:8443
+      - HTTP_TLS_CERTIFICATE=
+      - HTTP_TLS_KEY=
     depends_on:
       - postgres
       - nats
     deploy:
-      replicas: 3
+      replicas: 1
     healthcheck:
       test:
         [
@@ -88,27 +77,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
-
-  # OpenWorkers Logs Service
-  openworkers-logs:
-    image: ghcr.io/openworkers/openworkers-logs:v0.1.10-telemetry
-    env_file:
-      - .env
-    environment:
-      - RUST_LOG=openworkers_logs=info
-      - OTLP_SERVICE_NAME=openworkers-logs
-    depends_on:
-      - postgres
-      - nats
-
-  # OpenWorkers Scheduler Service
-  openworkers-scheduler:
-    image: ghcr.io/openworkers/openworkers-scheduler:v0.1.8-telemetry
-    env_file:
-      - .env
-    environment:
-      - RUST_LOG=openworkers_scheduler=info
-      - OTLP_SERVICE_NAME=openworkers-scheduler
-    depends_on:
-      - postgres
-      - nats

@@ -1,0 +1,8 @@
+services:
+  openworkers-runner:
+    volumes:
+      - ${HTTP_TLS_CERTIFICATE:?set HTTP_TLS_CERTIFICATE}:/certs/ssl.crt:ro
+      - ${HTTP_TLS_KEY:?set HTTP_TLS_KEY}:/certs/ssl.key:ro
+    environment:
+      - HTTP_TLS_CERTIFICATE=/certs/ssl.crt
+      - HTTP_TLS_KEY=/certs/ssl.key

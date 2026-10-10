@@ -13,20 +13,18 @@ covered in [Development loop](#10-development-loop), not a deployment target.
 | Process         | Language | Role                                                                             |
 | --------------- | -------- | -------------------------------------------------------------------------------- |
 | postgres        | -        | Single source of truth: workers, users, environments, assets metadata            |
-| nats            | -        | Log fan-out and scheduled events                                                 |
-| runner          | Rust     | Executes workers, serves HTTP on 8080                                            |
+| nats            | -        | Console log transport                                                            |
+| runner          | Rust     | Workers, cron, logs, public HTTP/TLS                                             |
 | postgate        | Rust     | HTTP proxy in front of postgres, used by the API dev loop and for user databases |
 | `ow` (CLI)      | Rust     | Migrations, users, workers, bindings, over a direct database connection          |
 | openworkers-api | Bun      | REST API and dashboard UI, deployed as a worker                                  |
-| logs            | Rust     | Log streaming to the dashboard (optional)                                        |
-| scheduler       | Rust     | Cron events (optional)                                                           |
 
 ## 1. Prerequisites
 
-- Rust (stable). The runner, scheduler, logs, postgate and the CLI are Rust.
+- Rust (stable). The runner, postgate and the CLI are Rust.
 - Bun. The API is TypeScript.
 - PostgreSQL 15+ and a NATS server, in containers or native (step 2).
-- A TLS certificate and key for the dev proxy (step 9).
+- A TLS certificate and key for the runner (step 9).
 
 Install the CLI:
 
@@ -50,8 +48,6 @@ git clone https://github.com/openworkers/openworkers-runner.git
 git clone https://github.com/openworkers/openworkers-api.git
 
 git clone https://github.com/openworkers/postgate.git             # step 5
-git clone https://github.com/openworkers/openworkers-logs.git     # optional
-git clone https://github.com/openworkers/openworkers-scheduler.git # optional
 ```
 
 ## 2. PostgreSQL and NATS
@@ -64,14 +60,10 @@ choice, only on the connection string.
 ```bash
 cd openworkers-infra
 cp .env.example .env    # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB at least
-docker compose -f compose.yml -f compose.dev.yml up -d postgres
-docker run -d --name ow-nats -p 4222:4222 nats:2.12.2-alpine3.22
+docker compose -f compose.yml -f compose.dev.yml up -d postgres nats
 ```
 
-`compose.dev.yml` publishes 5432 on the host. The `nats` service publishes no
-port, so a runner or scheduler running on the host cannot reach it through
-compose; run NATS directly as above, or add a `ports` mapping in your own
-`compose.override.yml`.
+`compose.dev.yml` publishes PostgreSQL on 5432 and NATS on 4222.
 
 ### Native
 
@@ -311,6 +303,7 @@ cd openworkers-runner
 
 cat > .env << 'EOF'
 NATS_SERVERS=nats://localhost:4222
+WORKER_DOMAINS=workers.dev.localhost
 DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
 RUST_LOG=info
 EOF
@@ -319,76 +312,43 @@ cargo run --features v8 --bin snapshot   # first run, and after any runtime JS c
 cargo run --features v8
 ```
 
-It listens on `0.0.0.0:8080`, which is not configurable, loads worker code from
-postgres, and resolves each request to a worker through the `X-Worker-Id` or
-`X-Worker-Name` header.
+The runner listens publicly on `0.0.0.0:8081` (`HTTP_ADDR`). It resolves
+workers by their configured subdomain or custom database domain. The loopback
+listener `127.0.0.1:8080` accepts internal worker selectors and admin requests.
 
-Log streaming in the dashboard needs the logs service. Its own default port
-collides with the runner, and the dev proxy expects 18080:
+Cron scheduling and log persistence start in this process. Do not start the
+standalone logs or scheduler services. Only one runner may use the platform
+database at a time; stop it before starting a replacement.
 
-```bash
-cd openworkers-logs
+## 9. Public TLS listener
 
-cat > .env << 'EOF'
-PORT=18080
-NATS_SERVERS=nats://localhost:4222
-DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
-EOF
-
-cargo run
-```
-
-Cron events need the scheduler:
+To enable TLS, set both variables before starting the runner:
 
 ```bash
-cd openworkers-scheduler
-
-cat > .env << 'EOF'
-NATS_SERVERS=nats://localhost:4222
-DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
-EOF
-
-cargo run
+export HTTP_TLS_CERTIFICATE=/path/to/ssl.crt
+export HTTP_TLS_KEY=/path/to/ssl.key
+cargo run --features v8
 ```
 
-## 9. Dev proxy
+It listens on `0.0.0.0:8443` (`HTTPS_ADDR`). The certificate must cover the
+configured dashboard and worker domains. The configuration above uses
+`dash.dev.localhost` and `*.workers.dev.localhost`. Worker subdomains require
+an explicit `WORKER_DOMAINS` setting.
+Update the API's `APP_URL` and OAuth callback URLs to include `:8443` when using
+this port. The Compose dev overlay maps HTTPS to host port 443 instead; add
+`-f compose.tls.yml` to load the certificate mounts.
 
-`run-dev.sh` starts an nginx container that terminates TLS for
-`dash.dev.localhost` and `*.workers.dev.localhost`:
+`openworkers-infra/run-dev.sh` can start this runner with loopback public
+listeners. Run either the script or `cargo run`, not both. It uses the runner's
+`.env` and accepts the same TLS variables. Nginx is not needed.
 
 ```bash
-HTTP_TLS_CERTIFICATE=/path/to/ssl.crt HTTP_TLS_KEY=/path/to/ssl.key ./run-dev.sh
+curl https://dash.dev.localhost:8443/api/health
 ```
 
-The certificate has to cover both names; mkcert produces one in a couple of
-commands. Browsers resolve `*.localhost` to loopback themselves; other tools may
-need `/etc/hosts` entries.
-
-The script picks a container runtime:
-
-- **docker**: the container joins the host network and the `127.0.0.1` upstreams
-  in the config work as written.
-- **apple `container`**: no host networking. The entrypoint rewrites the
-  `127.0.0.1` upstreams to the VM's gateway, so host processes have to listen
-  beyond loopback. Start the API dev server with `--host 0.0.0.0`.
-
-`nginx/servers/dash.dev.conf` routes `/api`, the worker upload endpoint, and
-the `@dash` catch-all to the runner (`workers_server`, 127.0.0.1:8080) with
-`X-Worker-Name: openworkers-api` -- the same path production takes. The proxy
-exists to mirror production; when iterating on the API with `bun dev`, talk to
-it directly on its vite port instead.
-
-Logs keep their own upstream (`log_server`, 127.0.0.1:18080).
-
-With the runner up and the proxy pointing at it, the platform answers on
-`https://dash.dev.localhost`:
-
-```bash
-curl https://dash.dev.localhost/api/health
-```
-
-A 502 means the runner is down; `No worker or project found for request` means
-the upload of step 7 did not land under the name the proxy sends.
+`No worker or project found for request` means the API worker name does not match
+`API_WORKER_NAME` (default `openworkers-api`). Dashboard hosts are configured
+with `DASHBOARD_HOSTS`; worker suffixes use `WORKER_DOMAINS`.
 
 ## 10. Development loop
 
@@ -407,16 +367,15 @@ JWT_REFRESH_SECRET=dev-refresh-secret-at-least-32-chars-long
 EOF
 
 bun install
-bun dev            # add --host 0.0.0.0 behind apple's container tool
+bun dev
 ```
 
 `pg_xxx` is the token from step 5. Vite listens on 5173, or `PORT` when set;
-talk to it directly there, the proxy stays on the runner. Without a
+talk to it directly there. Without a
 `DATABASE` binding the app falls back to the token, and a missing one gives `No database client available: neither
 DATABASE binding nor POSTGATE_TOKEN configured`.
 
-**Test what you ship.** Redeploy the worker and switch the proxy back to
-`workers_server`:
+**Test what you ship.** Redeploy the worker and use the runner's public address:
 
 ```bash
 cd openworkers-api
@@ -430,18 +389,17 @@ checked here before it counts as working.
 
 ## 11. Ports
 
-| Service         | Port    | Set by                                             |
-| --------------- | ------- | -------------------------------------------------- |
-| PostgreSQL      | 5432    | postgres                                           |
-| NATS            | 4222    | nats-server                                        |
-| Postgate        | 6080    | `POSTGATE_PORT`; the binary alone defaults to 3000 |
-| API (`bun dev`) | 5173    | vite; `PORT` overrides                             |
-| Runner          | 8080    | hardcoded                                          |
-| Logs            | 18080   | `PORT`; the binary alone defaults to 8080          |
-| Dev proxy       | 80, 443 | `run-dev.sh`                                       |
+| Service         | Port | Set by                                             |
+| --------------- | ---- | -------------------------------------------------- |
+| PostgreSQL      | 5432 | postgres                                           |
+| NATS            | 4222 | nats-server                                        |
+| Postgate        | 6080 | `POSTGATE_PORT`; the binary alone defaults to 3000 |
+| API (`bun dev`) | 5173 | vite; `PORT` overrides                             |
+| Runner internal | 8080 | Loopback only; fixed                               |
+| Runner HTTP     | 8081 | `HTTP_ADDR`                                        |
+| Runner HTTPS    | 8443 | `HTTPS_ADDR`; requires TLS files                   |
 
-The nginx dev config hardcodes 8080 and 18080 as upstreams, so
-changing one of those means changing `nginx/servers/dash.dev.conf` too.
+The Compose overlays publish HTTP/HTTPS on 80/443 (dev) or 5080/50443 (prod).
 
 ## 12. Symptoms
 
@@ -457,22 +415,21 @@ changing one of those means changing `nginx/servers/dash.dev.conf` too.
 
 ## Container stack
 
-`compose.yml` runs the infrastructure in containers: postgres, nats, postgate,
-the runner, logs, the scheduler and the proxy. The API worker is uploaded with
-the CLI exactly as in step 7; the compose stack only hosts it. Setup is
-identical, and `.env` carries the variables the containers read.
+`compose.yml` runs PostgreSQL, NATS, private Postgate and one runner. The API
+worker is uploaded with the CLI as in step 7. `.env` supplies configuration.
+The default build uses the sibling `openworkers-runner` checkout. TLS is optional;
+add `-f compose.tls.yml` to the command below when TLS paths are set in `.env`.
+The production overlay also enables `inbound-allowlist.txt`; see the deployment
+instructions before exposing the runner.
 
 ```bash
-docker compose up -d
+docker compose -f compose.yml -f compose.dev.yml up -d --build --remove-orphans
 docker compose ps
-docker compose logs -f openworkers-api
-
-docker compose pull        # update images
-ow infra migrate run       # apply new migrations
-docker compose up -d
+docker compose logs -f openworkers-runner
 
 ./database.sh backup
 ./database.sh restore ~/backups/openworkers/openworkers-2026-01-10.dump
 ./database.sh psql
 ```
 
+See [deployment](README.md#deploy) before replacing an existing multi-runner stack.
