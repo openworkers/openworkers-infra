@@ -49,18 +49,12 @@ The allowlist has the Cloudflare ranges. Only these peers can connect to the
 public ports, and the runner reads the client address from `cf-connecting-ip`.
 When Cloudflare changes its ranges, edit the file and restart the runner.
 
-Docker gives the runner the real peer address over IPv4. Over IPv6, a default
+The production overlay publishes the ports on IPv4 only. Over IPv6, a default
 Docker daemon sends the connection through `docker-proxy`, and the runner sees
-the address of the `docker0` gateway, so the allowlist refuses it. Do one of
-these before the first deploy:
-
-- Keep only an `A` record for the origin in Cloudflare, so Cloudflare connects
-  over IPv4.
-- Set `"ipv6": true` and a `"fixed-cidr-v6"` in `/etc/docker/daemon.json`; then
-  Docker translates IPv6 connections and keeps the peer address.
-
-The runner logs `connection refused by the inbound allowlist` with the peer
-address for each refused connection.
+the address of the gateway, so the allowlist would refuse every IPv6 peer. The
+origin record in Cloudflare must be an `A` record. The runner logs
+`connection refused by the inbound allowlist` with the peer address for each
+refused connection.
 
 The development overlay builds the image from `../openworkers-runner` and
 publishes HTTP on `80`. Add `-f compose.tls.yml` for HTTPS on `443`.

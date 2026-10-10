@@ -15,6 +15,8 @@ services:
       - CLIENT_IP_HEADER=cf-connecting-ip
       - HTTP_TLS_CERTIFICATE=/certs/ssl.crt
       - HTTP_TLS_KEY=/certs/ssl.key
+    # IPv4 only: Docker gives an IPv6 peer the address of its gateway, and
+    # the allowlist would refuse it
     ports:
-      - 5080:8081
-      - 50443:8443
+      - 0.0.0.0:5080:8081
+      - 0.0.0.0:50443:8443
