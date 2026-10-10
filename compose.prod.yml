@@ -11,6 +11,7 @@ services:
       - ${HTTP_TLS_KEY:?set HTTP_TLS_KEY}:/certs/ssl.key:ro
     environment:
       - INBOUND_ALLOWLIST_FILE=/etc/openworkers/inbound-allowlist.txt
+      - WORKER_DOMAINS=workers.rocks
       # Cloudflare gives the client address; only its ranges can connect
       - CLIENT_IP_HEADER=cf-connecting-ip
       - HTTP_TLS_CERTIFICATE=/certs/ssl.crt

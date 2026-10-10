@@ -28,8 +28,9 @@ database does not start. There is no rolling update and no failover.
 
 ## Deploy
 
-`compose.yml` runs the published runner image. Set `RUNNER_IMAGE` to run
-another image. The production overlay publishes HTTP on `5080` and HTTPS on
+`compose.yml` runs the published runner image of the release. The production
+overlay sets `WORKER_DOMAINS=workers.rocks`, so `{name}.workers.rocks` reaches
+its worker. The production overlay publishes HTTP on `5080` and HTTPS on
 `50443`, mounts the TLS files that `HTTP_TLS_CERTIFICATE` and `HTTP_TLS_KEY`
 give in `.env`, and mounts `inbound-allowlist.txt`.
 
