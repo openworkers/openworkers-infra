@@ -12,6 +12,7 @@ services:
     environment:
       - INBOUND_ALLOWLIST_FILE=/etc/openworkers/inbound-allowlist.txt
       - WORKER_DOMAINS=workers.rocks
+      - ISOLATE_HEAP_MAX_MB=512
       # Cloudflare gives the client address; only its ranges can connect
       - CLIENT_IP_HEADER=cf-connecting-ip
       - HTTP_TLS_CERTIFICATE=/certs/ssl.crt
