@@ -335,12 +335,14 @@ Update the API's `APP_URL` and OAuth callback URLs to include `:8443` when using
 this port. The Compose dev overlay maps HTTPS to host port 443 instead; add
 `-f compose.tls.yml` to load the certificate mounts.
 
-`openworkers-infra/run-dev.sh` can start this runner with loopback public
-listeners. Run either the script or `cargo run`, not both. It uses the runner's
-`.env` and accepts the same TLS variables. Nginx is not needed.
+`openworkers-infra/run-dev.sh` starts this runner on port 443 (HTTPS) and port
+80 (HTTP) of all addresses: macOS lets a user bind a port below 1024 only on
+`0.0.0.0`. It needs `HTTP_TLS_CERTIFICATE` and `HTTP_TLS_KEY`,
+and it uses the runner's `.env`. Run either the script or `cargo run`, not both.
+Nginx is not needed. When another program uses port 8080, set `INTERNAL_PORT`.
 
 ```bash
-curl https://dash.dev.localhost:8443/api/health
+curl https://dash.dev.localhost/api/health
 ```
 
 `No worker or project found for request` means the API worker name does not match
