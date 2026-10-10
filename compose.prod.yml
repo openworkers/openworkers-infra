@@ -20,5 +20,4 @@ services:
     # IPv4 only: Docker gives an IPv6 peer the address of its gateway, and
     # the allowlist would refuse it
     ports:
-      - 0.0.0.0:5080:8081
-      - 0.0.0.0:50443:8443
+      - 0.0.0.0:443:8443

@@ -395,7 +395,7 @@ checked here before it counts as working.
 | Runner HTTP     | 8081 | `HTTP_ADDR`                                        |
 | Runner HTTPS    | 8443 | `HTTPS_ADDR`; requires TLS files                   |
 
-The Compose overlays publish HTTP/HTTPS on 80/443 (dev) or 5080/50443 (prod).
+The Compose overlays publish HTTP/HTTPS on 80/443 (dev), and HTTPS on 443 (prod).
 
 ## 12. Symptoms
 

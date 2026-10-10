@@ -30,16 +30,19 @@ database does not start. There is no rolling update and no failover.
 
 `compose.yml` runs the published runner image of the release. The production
 overlay sets `WORKER_DOMAINS=workers.rocks`, so `{name}.workers.rocks` reaches
-its worker. The production overlay publishes HTTP on `5080` and HTTPS on
-`50443`, mounts the TLS files that `HTTP_TLS_CERTIFICATE` and `HTTP_TLS_KEY`
-give in `.env`, and mounts `inbound-allowlist.txt`.
+its worker. The production overlay publishes HTTPS on `443` and no HTTP port,
+mounts the TLS files that `HTTP_TLS_CERTIFICATE` and `HTTP_TLS_KEY` give in
+`.env`, and mounts `inbound-allowlist.txt`.
 
 On the production host, after you copy the Compose files and the allowlist:
 
 ```bash
-docker compose -f compose.yml -f compose.prod.yml pull openworkers-runner
-docker compose -f compose.yml -f compose.prod.yml up -d --remove-orphans
+docker compose -f compose.yml -f compose.signoz.yml -f compose.prod.yml pull openworkers-runner
+docker compose -f compose.yml -f compose.signoz.yml -f compose.prod.yml up -d --remove-orphans
 ```
+
+`compose.signoz.yml` puts the runner on `signoz-net`, so it can export its
+telemetry to `signoz-ingester-1`.
 
 Compose stops the old runner before it starts the new one, so the traffic stops
 for that time. `--remove-orphans` removes the containers of nginx, NATS,
@@ -47,10 +50,10 @@ openworkers-logs and openworkers-scheduler. Do not keep openworkers-logs or
 openworkers-scheduler on the database of the runner.
 
 The allowlist has the Cloudflare ranges. Only these peers can connect to the
-public ports, and the runner reads the client address from `cf-connecting-ip`.
+public port, and the runner reads the client address from `cf-connecting-ip`.
 When Cloudflare changes its ranges, edit the file and restart the runner.
 
-The production overlay publishes the ports on IPv4 only. Over IPv6, a default
+The production overlay publishes the port on IPv4 only. Over IPv6, a default
 Docker daemon sends the connection through `docker-proxy`, and the runner sees
 the address of the gateway, so the allowlist would refuse every IPv6 peer. The
 origin record in Cloudflare must be an `A` record. The runner logs
