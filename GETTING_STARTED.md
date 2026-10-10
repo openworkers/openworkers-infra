@@ -13,7 +13,6 @@ covered in [Development loop](#10-development-loop), not a deployment target.
 | Process         | Language | Role                                                                             |
 | --------------- | -------- | -------------------------------------------------------------------------------- |
 | postgres        | -        | Single source of truth: workers, users, environments, assets metadata            |
-| nats            | -        | Console log transport                                                            |
 | runner          | Rust     | Workers, cron, logs, public HTTP/TLS                                             |
 | postgate        | Rust     | HTTP proxy in front of postgres, used by the API dev loop and for user databases |
 | `ow` (CLI)      | Rust     | Migrations, users, workers, bindings, over a direct database connection          |
@@ -23,7 +22,7 @@ covered in [Development loop](#10-development-loop), not a deployment target.
 
 - Rust (stable). The runner, postgate and the CLI are Rust.
 - Bun. The API is TypeScript.
-- PostgreSQL 15+ and a NATS server, in containers or native (step 2).
+- PostgreSQL 15+, in a container or native (step 2).
 - A TLS certificate and key for the runner (step 9).
 
 Install the CLI:
@@ -50,27 +49,26 @@ git clone https://github.com/openworkers/openworkers-api.git
 git clone https://github.com/openworkers/postgate.git             # step 5
 ```
 
-## 2. PostgreSQL and NATS
+## 2. PostgreSQL
 
-Two ordinary services. Pick either way to run them; nothing below depends on the
-choice, only on the connection string.
+Pick either way to run it; nothing below depends on the choice, only on the
+connection string.
 
 ### Containers
 
 ```bash
 cd openworkers-infra
 cp .env.example .env    # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB at least
-docker compose -f compose.yml -f compose.dev.yml up -d postgres nats
+docker compose -f compose.yml -f compose.dev.yml up -d postgres
 ```
 
-`compose.dev.yml` publishes PostgreSQL on 5432 and NATS on 4222.
+`compose.dev.yml` publishes PostgreSQL on 5432.
 
 ### Native
 
 ```bash
-brew install postgresql@15 nats-server
+brew install postgresql@15
 brew services start postgresql@15
-brew services start nats-server
 
 createuser openworkers
 createdb -O openworkers openworkers
@@ -302,7 +300,6 @@ The runner serves every worker, including the API:
 cd openworkers-runner
 
 cat > .env << 'EOF'
-NATS_SERVERS=nats://localhost:4222
 WORKER_DOMAINS=workers.dev.localhost
 DATABASE_URL=postgres://openworkers@localhost:5432/openworkers
 RUST_LOG=info
@@ -392,7 +389,6 @@ checked here before it counts as working.
 | Service         | Port | Set by                                             |
 | --------------- | ---- | -------------------------------------------------- |
 | PostgreSQL      | 5432 | postgres                                           |
-| NATS            | 4222 | nats-server                                        |
 | Postgate        | 6080 | `POSTGATE_PORT`; the binary alone defaults to 3000 |
 | API (`bun dev`) | 5173 | vite; `PORT` overrides                             |
 | Runner internal | 8080 | Loopback only; fixed                               |
@@ -415,7 +411,7 @@ The Compose overlays publish HTTP/HTTPS on 80/443 (dev) or 5080/50443 (prod).
 
 ## Container stack
 
-`compose.yml` runs PostgreSQL, NATS, private Postgate and one runner. The API
+`compose.yml` runs PostgreSQL, private Postgate and one runner. The API
 worker is uploaded with the CLI as in step 7. `.env` supplies configuration.
 The default build uses the sibling `openworkers-runner` checkout. TLS is optional;
 add `-f compose.tls.yml` to the command below when TLS paths are set in `.env`.

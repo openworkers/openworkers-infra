@@ -2,10 +2,13 @@ services:
   postgres:
     ports:
       - 5432:5432
-  nats:
-    ports:
-      - 4222:4222
   openworkers-runner:
+    image: openworkers-runner:local
+    build:
+      context: ../openworkers-runner
+      args:
+        RUNTIME: v8
+        TELEMETRY: "true"
     ports:
       - 80:8081
       - 443:8443

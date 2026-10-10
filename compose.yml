@@ -20,17 +20,6 @@ services:
       retries: 5
       start_period: 5s
 
-  # NATS
-  nats:
-    image: nats:2.12.2-alpine3.22
-    command: ["--http_port", "8222"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget http://localhost:8222/healthz -q -S -O -"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
   # Postgate (HTTP proxy for Postgres)
   # Uses OpenWorkers database via views (postgate_databases, postgate_tokens)
   postgate:
@@ -46,12 +35,7 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ${RUNNER_IMAGE:-openworkers-runner:local}
-    build:
-      context: ../openworkers-runner
-      args:
-        RUNTIME: v8
-        TELEMETRY: "true"
+    image: ${RUNNER_IMAGE:-ghcr.io/openworkers/openworkers-runner:v1.15.0-v8-telemetry}
     env_file:
       - .env
     environment:
@@ -64,7 +48,6 @@ services:
       - HTTP_TLS_KEY=
     depends_on:
       - postgres
-      - nats
     deploy:
       replicas: 1
     healthcheck:

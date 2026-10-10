@@ -1,6 +1,4 @@
 services:
-  nats:
-    restart: always
   postgres:
     restart: always
   postgate:
@@ -9,8 +7,14 @@ services:
     restart: always
     volumes:
       - ./inbound-allowlist.txt:/etc/openworkers/inbound-allowlist.txt:ro
+      - ${HTTP_TLS_CERTIFICATE:?set HTTP_TLS_CERTIFICATE}:/certs/ssl.crt:ro
+      - ${HTTP_TLS_KEY:?set HTTP_TLS_KEY}:/certs/ssl.key:ro
     environment:
       - INBOUND_ALLOWLIST_FILE=/etc/openworkers/inbound-allowlist.txt
+      # Cloudflare gives the client address; only its ranges can connect
+      - CLIENT_IP_HEADER=cf-connecting-ip
+      - HTTP_TLS_CERTIFICATE=/certs/ssl.crt
+      - HTTP_TLS_KEY=/certs/ssl.key
     ports:
       - 5080:8081
       - 50443:8443

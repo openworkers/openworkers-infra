@@ -10,54 +10,50 @@ deployed as a worker, and the public listeners.
 
 ## Stack
 
-| Service            | Role                                                                         |
-| ------------------ | ---------------------------------------------------------------------------- |
-| PostgreSQL         | Platform data and worker logs                                                |
-| NATS               | Console log transport                                                        |
-| openworkers-runner | HTTP/TLS, workers, cron scheduler, log persistence and SSE/WebSocket streams |
-| postgate           | Existing private HTTP database API; no public route                          |
-| openworkers-api    | REST API and dashboard, deployed as a worker                                 |
-| openworkers-cli    | Migrations and platform administration                                       |
+| Service            | Role                                                                    |
+| ------------------ | ----------------------------------------------------------------------- |
+| PostgreSQL         | Platform data and worker logs                                           |
+| openworkers-runner | Public HTTP and HTTPS, workers, crons, log storage and log streams      |
+| postgate           | HTTP database API on the Compose network; no public route               |
+| openworkers-api    | REST API and dashboard, deployed as a worker                            |
+| openworkers-cli    | Migrations and platform administration                                  |
 
-Run one runner. It receives public traffic directly, without Nginx, and calls
-cron handlers in the same process. The internal listener on `127.0.0.1:8080`
-serves bindings and administration. Only public ports are published.
+One runner serves the public traffic. It does not use nginx, NATS,
+openworkers-logs or openworkers-scheduler. The internal listener
+`127.0.0.1:8080` of the runner serves the worker-to-worker calls and the admin
+endpoints; Compose does not publish it.
 
-The runner holds a PostgreSQL advisory lock to reject a second instance. Stop
-the old runner before starting its replacement. There is no rolling update or
-failover. The Postgate library remains available for database bindings; removing
-the standalone Postgate service is a separate change.
+The runner holds a PostgreSQL advisory lock, and a second runner on the same
+database does not start. There is no rolling update and no failover.
 
 ## Deploy
 
-The default runner image is built from `../openworkers-runner`. Set `RUNNER_IMAGE`
-to use a published image that includes the integrated services. Older images do
-not serve the public ports or run the scheduler and log collector.
+`compose.yml` runs the published runner image. Set `RUNNER_IMAGE` to run
+another image. The production overlay publishes HTTP on `5080` and HTTPS on
+`50443`, mounts the TLS files that `HTTP_TLS_CERTIFICATE` and `HTTP_TLS_KEY`
+give in `.env`, and mounts `inbound-allowlist.txt`.
+
+On the production host, after you copy the Compose files and the allowlist:
 
 ```bash
-docker compose -f compose.yml -f compose.prod.yml build openworkers-runner
+docker compose -f compose.yml -f compose.prod.yml pull openworkers-runner
 docker compose -f compose.yml -f compose.prod.yml up -d --remove-orphans
 ```
 
-For migration from the old stack, stop it **before** applying the new Compose
-files. This stops all runner replicas, the scheduler, the log collector and
-Nginx. Do not run the old log collector alongside the new runner: it would insert
-duplicate records. The new runner does not consume the old `scheduled` NATS subject.
+Compose stops the old runner before it starts the new one, so the traffic stops
+for that time. `--remove-orphans` removes the containers of nginx, NATS,
+openworkers-logs and openworkers-scheduler. Do not keep openworkers-logs or
+openworkers-scheduler on the database of the runner.
 
-The production mapping stays `5080` for HTTP and `50443` for HTTPS. The development
-overlay maps `80` and `443`. Mount certificates through `HTTP_TLS_CERTIFICATE`
-and `HTTP_TLS_KEY` in `.env` and add `-f compose.tls.yml` to enable HTTPS and
-HTTP/2. Without this overlay, public HTTP uses HTTP/1.1. The runner loads
-certificates on startup. There is no public
-Postgate hostname. Cloudflare client-IP headers are not trusted; the recorded IP
-is the TCP peer.
+The allowlist has the Cloudflare ranges. Only these peers can connect to the
+public ports, and the runner reads the client address from `cf-connecting-ip`.
+When Cloudflare changes its ranges, edit the file and restart the runner. Before
+the first deploy, check that Docker gives the runner the real peer address: if
+the runner logs `connection refused by the inbound allowlist` for each request,
+Docker replaces the address (for example with `docker-proxy` on IPv6).
 
-The production overlay mounts `inbound-allowlist.txt`, initialized with the
-Cloudflare ranges from the former Nginx configuration. It admits only those TCP
-peers on public ports. Edit the file for your deployment and restart the runner.
-Use one IPv4/IPv6 address or CIDR per line. `#` comments are allowed. An empty
-file denies all; an invalid or unreadable file prevents startup. The dev overlay
-has no allowlist. Local health checks use the internal listener.
+The development overlay builds the image from `../openworkers-runner` and
+publishes HTTP on `80`. Add `-f compose.tls.yml` for HTTPS on `443`.
 
 ## How Database Access Works
 
