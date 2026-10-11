@@ -135,7 +135,7 @@ environment and storage config the CLI creates through a db alias.
 **(a) Claim it with your GitHub handle: merged identity.**
 
 ```bash
-ow infra users create max-lt --system
+ow infra users create <github-login> --system
 ```
 
 GitHub sign-in looks up the GitHub numeric id first; finding none, it inserts a
@@ -156,6 +156,10 @@ reachable only through that address and password. Your GitHub sign-in then
 creates an ordinary user row with an empty dashboard: no `openworkers-api`, no
 platform storage, only what that account creates. Recommended: it is the only
 setup where you see the product as a user sees it.
+
+`--password` prompts for the password on the terminal; a script cannot give it.
+Without a password, this user cannot sign in to the dashboard. The CLI does not
+need it.
 
 Then point the alias at the claimed user. Every `ow infra` command creates
 resources owned by it:
@@ -220,6 +224,28 @@ ow infra setup-storage \
 
 The credentials are written into the `infra` entry of
 `~/.openworkers/config.json`: per machine and per alias, not in the database.
+
+For a local machine, an S3-compatible server in a container is sufficient.
+For example, with [RustFS](https://github.com/rustfs/rustfs):
+
+```bash
+docker run -d --name ow-s3 -p 9000:9000 \
+  -e RUSTFS_ACCESS_KEY=owlocal -e RUSTFS_SECRET_KEY=owlocal-secret-key \
+  rustfs/rustfs
+
+# Create the bucket with a signed request
+curl --aws-sigv4 "aws:amz:us-east-1:s3" --user owlocal:owlocal-secret-key \
+  -X PUT http://localhost:9000/openworkers-dev
+
+ow infra setup-storage \
+  --endpoint http://localhost:9000 \
+  --bucket openworkers-dev \
+  --access-key-id owlocal \
+  --secret-access-key owlocal-secret-key
+```
+
+Data in this container is lost when you remove it. The `minio/minio` image is
+not available on Docker Hub.
 
 Two failure modes:
 
