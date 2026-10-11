@@ -1,5 +1,7 @@
 volumes:
   postgres_data:
+  # D1 databases: one SQLite file each. Snapshots go to D1_ARCHIVE_* (.env)
+  runner_d1:
 
 services:
   # Postgres
@@ -46,6 +48,9 @@ services:
       - HTTPS_ADDR=0.0.0.0:8443
       - HTTP_TLS_CERTIFICATE=
       - HTTP_TLS_KEY=
+      - D1_DATA_DIR=/var/lib/openworkers/d1
+    volumes:
+      - runner_d1:/var/lib/openworkers/d1
     depends_on:
       - postgres
     deploy:
