@@ -37,7 +37,7 @@ services:
 
   # OpenWorkers Runner
   openworkers-runner:
-    image: ghcr.io/openworkers/openworkers-runner:v1.16.0-v8-telemetry
+    image: ghcr.io/openworkers/openworkers-runner:v1.16.1-v8-telemetry
     env_file:
       - .env
     environment:
